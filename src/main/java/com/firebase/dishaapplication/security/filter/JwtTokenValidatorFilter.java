@@ -25,8 +25,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
-import static org.springframework.boot.logging.log4j2.Log4J2LoggingSystem.getEnvironment;
-
 @RequiredArgsConstructor
 public class JwtTokenValidatorFilter extends OncePerRequestFilter {
 

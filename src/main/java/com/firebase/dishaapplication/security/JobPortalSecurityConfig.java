@@ -1,5 +1,6 @@
 package com.firebase.dishaapplication.security;
 
+import com.firebase.dishaapplication.security.filter.JwtTokenValidatorFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
@@ -7,14 +8,20 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
+import org.springframework.security.authentication.password.CompromisedPasswordChecker;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.password.HaveIBeenPwnedRestApiPasswordChecker;
+import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -38,14 +45,17 @@ public class JobPortalSecurityConfig
 
     @Bean
     SecurityFilterChain customSecurityFilterChain(HttpSecurity http) {
-        return http.csrf(csrfConfig -> csrfConfig.disable())
+        return http.csrf(csrfConfig -> csrfConfig
+                .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
+                .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler()))
                 .cors(corsConfig -> corsConfig.configurationSource(corsConfigurationSource()))
                 .authorizeHttpRequests(requests -> {
                     publicPaths.forEach(path -> requests.requestMatchers(path).permitAll());
                     securedPaths.forEach(path -> requests.requestMatchers(path).authenticated());
                     requests.anyRequest().denyAll();
                 })
-                .formLogin(flc -> flc.disable() )
+                .addFilterBefore(new JwtTokenValidatorFilter(publicPaths), BasicAuthenticationFilter.class)
+                .formLogin(flc -> flc.disable())
                 .httpBasic(withDefaults())
                 .build();
     }
@@ -65,31 +75,18 @@ public class JobPortalSecurityConfig
     }
 
     @Bean
-    public UserDetailsService userDetailsService() {
-
-//        var premPasswordHashValue = passwordEncoder().encode("@Prem123");
-//        System.out.println(premPasswordHashValue);
-//        var dishaPasswordHashValue = passwordEncoder().encode("@Disha123");
-//        System.out.println(dishaPasswordHashValue);
-//        var sonaliPasswordHashValue = passwordEncoder().encode("@Sonali123");
-//        System.out.println(sonaliPasswordHashValue);
-
-        var user = User.builder().username("Prem").password("$2a$10$S5Dqo/uLzZZzgSYQ7jNEHub0O4YIV7oCFQ/KBCMONVfOtmWVX/kcm").roles("USER").build();
-        var user2 = User.builder().username("Disha").password("$2a$10$jnKupqTBqgkyffnRtOgbouslW/hRgTxg86Wy8KKeVBXf75gWyA/By").roles("USER").build();
-        var user3 = User.builder().username("Sonali").password("$2a$10$sSJIq2Bb.BhrNy7HqJFX4udMpiOfqYcSN/TQKGT.YQjtaX8i0HKLm").roles("ADMIN").build();
-
-        return new InMemoryUserDetailsManager(Arrays.asList(user, user2, user3));
-    }
-
-    @Bean
-    public AuthenticationManager authenticationManager() {
-        var provider = new DaoAuthenticationProvider(userDetailsService());
-        provider.setPasswordEncoder(passwordEncoder());
-        return new ProviderManager(provider);
+    public AuthenticationManager authenticationManager(JobPortalUsernamePwdAuthenticationProvider authenticationProvider) throws Exception
+    {
+        return new ProviderManager(authenticationProvider);
     }
 
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    public CompromisedPasswordChecker compromisedPasswordChecker() {
+        return new HaveIBeenPwnedRestApiPasswordChecker();
     }
 }
